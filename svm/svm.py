@@ -4,7 +4,7 @@ import math
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 
-from data import inputs, targets, plotContour, plotPoints, plotShow
+from data import generateData, plotContour, plotPoints
 import time
 
 
@@ -12,15 +12,20 @@ def kernel_lin(x, y):
     return np.dot(x, y)
 
 
-def kernel_poly(x, y):
-    p = 3
-    return (np.dot(x, y) + 1) ** p
+def get_kernel_poly(p):
+    def kernel_poly(x, y):
+        return (np.dot(x, y) + 1) ** p
+
+    return kernel_poly
 
 
-def kernel_rbf(x, y):
-    a = x - y
-    sigma = 1
-    return np.exp((np.sqrt(np.dot(a, a)) ** 2) / (2 * sigma ** 2))
+def get_kernel_rbf(sigma):
+    def kernel_rbf(x, y):
+        a = x - y
+        sigma = 1
+        return np.exp((np.sqrt(np.dot(a, a)) ** 2) / (2 * sigma ** 2))
+
+    return kernel_rbf
 
 
 class SVM:
@@ -57,23 +62,31 @@ class SVM:
             return np.dot(a, self.T)
 
         start = np.zeros(N)
-        B = [(0, None) for b in range(N)]
+        B = [(0, self.C) for b in range(N)]
         XC = {"type": "eq", "fun": zerofun}
 
         mini = minimize(objective, start, bounds=B, constraints=XC)
         self.alpha = mini["x"]
-        sv_args = np.argwhere(self.alpha > 10 ** -5).flatten()
+        self.alpha = np.where(self.alpha > 10 ** -5, self.alpha, 0)
 
-        assert len(sv_args), "Found no alphas"
+        assert np.sum(self.alpha) > 0, "No alphas > 0"
 
         # keep only non-zeros alphas, X, T (the support vectors)
-        self.X = self.X[sv_args]
-        self.T = self.T[sv_args]
-        self.alpha = self.alpha[sv_args]
 
         # set B by forcing indicator of support vectors to be target
+        sv1_arg = np.argwhere((0 < self.alpha) & (self.alpha < self.C)).flatten()
+        print (self.alpha)
+        assert (len(sv1_arg)) > 0, "No support vectors found"
+        sv1_arg = sv1_arg[0]
+
         self.b = 0
-        self.b = self.indicator(self.X[0]) - self.T[0]
+        self.b = self.indicator(self.X[sv1_arg]) - self.T[sv1_arg]
+
+        # Keep only samples where alpha > 0
+        keep = np.argwhere(self.alpha > 0).flatten()
+        self.X = self.X[keep]
+        self.T = self.T[keep]
+        self.alpha = self.alpha[keep]
 
     def indicator(self, x):
         return (
@@ -84,17 +97,14 @@ class SVM:
         )
 
 
-svm = SVM(40, kernel_rbf)
-svm.train(inputs, targets)
-plotContour(svm.indicator)
-plotPoints()
-plotShow()
+if __name__ == "__main__":
+    stats1 = [(1, (1.5, 0.5), 0.2), (1, (-1.5, 0.5), 0.2), (-1, (0.0, -0.5), 0.2)]
+    
+    stats2 = [(1, (0,5), 1), (-1, (0,0), 1)]
+    
+    inputs, targets = generateData(stats2, 10)
 
-# print (np.array([[1,2,3],[1,2,3]]) @ np.array([1,2,3]).T)
-
-# svs = inputs[np.argwhere(svm.alpha != 0)]
-
-# plt.show(block=False)
-# plt.pause(1)
-# plt.plot(svs.T[0], svs.T[1], "o")
-# plt.show()
+    svm = SVM(0.05, kernel_lin)
+    svm.train(inputs, targets)
+    plotContour(svm.indicator)
+    plotPoints(inputs, targets).show()
