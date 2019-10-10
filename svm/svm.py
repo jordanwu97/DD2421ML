@@ -4,7 +4,7 @@ import math
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 
-from data import generateData, plotContour, plotPoints
+from data import *
 import time
 
 
@@ -21,9 +21,7 @@ def get_kernel_poly(p):
 
 def get_kernel_rbf(sigma):
     def kernel_rbf(x, y):
-        a = x - y
-        sigma = 1
-        return np.exp((np.sqrt(np.dot(a, a)) ** 2) / (2 * sigma ** 2))
+        return np.exp(-1 * (np.linalg.norm(x - y) ** 2) / (2 * sigma ** 2))
 
     return kernel_rbf
 
@@ -68,25 +66,17 @@ class SVM:
         mini = minimize(objective, start, bounds=B, constraints=XC)
         self.alpha = mini["x"]
         self.alpha = np.where(self.alpha > 10 ** -5, self.alpha, 0)
-
-        assert np.sum(self.alpha) > 0, "No alphas > 0"
-
-        # keep only non-zeros alphas, X, T (the support vectors)
+        print (self.alpha)
+        assert np.max(self.alpha) > 0, "No alphas > 0"
 
         # set B by forcing indicator of support vectors to be target
-        sv1_arg = np.argwhere((0 < self.alpha) & (self.alpha < self.C)).flatten()
-        print (self.alpha)
+        C = np.inf if self.C == None else self.C
+        sv1_arg = np.argwhere((0 < self.alpha) & (self.alpha < C)).flatten()
         assert (len(sv1_arg)) > 0, "No support vectors found"
         sv1_arg = sv1_arg[0]
 
         self.b = 0
         self.b = self.indicator(self.X[sv1_arg]) - self.T[sv1_arg]
-
-        # Keep only samples where alpha > 0
-        keep = np.argwhere(self.alpha > 0).flatten()
-        self.X = self.X[keep]
-        self.T = self.T[keep]
-        self.alpha = self.alpha[keep]
 
     def indicator(self, x):
         return (
@@ -96,15 +86,110 @@ class SVM:
             - self.b
         )
 
+    def getAccuracy(self):
+        pred = np.where(np.array([self.indicator(x) for x in self.X]) >= 0, 1, -1)
+        return np.sum(pred == self.T) / len(self.T)
+
 
 if __name__ == "__main__":
-    stats1 = [(1, (1.5, 0.5), 0.2), (1, (-1.5, 0.5), 0.2), (-1, (0.0, -0.5), 0.2)]
-    
-    stats2 = [(1, (0,5), 1), (-1, (0,0), 1)]
-    
-    inputs, targets = generateData(stats2, 10)
 
-    svm = SVM(0.05, kernel_lin)
-    svm.train(inputs, targets)
-    plotContour(svm.indicator)
-    plotPoints(inputs, targets).show()
+    # Linear
+    stats = [(1, (1.5, 0.5), 0.2), (1, (-1.5, 0.5), 0.2), (-1, (0.0, -0.5), 0.2)]
+    inputs, targets = generateData(stats, 10)
+
+    # svm = SVM(None, kernel_lin)
+    # svm.train(inputs, targets)
+    # print ("Accuracy:", svm.getAccuracy())
+    # plotPoints(inputs, targets)
+    # plt.title("Linear Kernel")
+    # plotContour(svm.indicator)
+
+    # stats = [(1, (0, 0), 1), (-1, (0.25, 0), 1)]
+    # inputs, targets = generateData(stats, 50)
+    # svm = SVM(None, kernel_lin)
+    # svm.train(inputs, targets)
+    # print ("Accuracy:", svm.getAccuracy())
+    # plotPoints(inputs, targets)
+    # plt.title("Linear Kernel")
+    # plotContour(svm.indicator)
+    # plt.savefig('pictures/unseperable.png', bbox_inches='tight')
+
+    # plt.clf()
+
+    # inputs, targets = generateCircularData()
+    # svm = SVM(None, kernel_lin)
+    # svm.train(inputs, targets)
+    # print ("Accuracy:", svm.getAccuracy())
+    # plotPoints(inputs, targets)
+    # plt.title("Linear Kernel")
+    # plotContour(svm.indicator)
+    # plt.savefig('pictures/unseperable_circle.png', bbox_inches='tight')
+
+    # exit()
+
+    # for i, c in enumerate([0.1,1,10,100]):
+    #     svm = SVM(c, kernel_lin)
+    #     svm.train(inputs, targets)
+    #     plt.subplot(2,2,i+1)
+    #     plotPoints(inputs, targets)
+    #     plotContour(svm.indicator)
+    #     plt.title(f"Linear Kernel (C={c})")
+    #     plt.tight_layout()
+    
+    # plt.savefig("pictures/various_c_values.png", bbox_inches='tight')
+
+    # exit()
+
+    # Poly
+    # stats = [(1, (1.5, 0.5), 0.2), (1, (-1.5, 0.5), 0.2), (-1, (0.0, -0.5), 0.2)]
+    # inputs, targets = generateData(stats, 10)
+    # inds = []
+    # for p in range(1,5):
+    #     svm = SVM(None, get_kernel_poly(p))
+    #     svm.train(inputs, targets)
+    #     accuracy = svm.getAccuracy()
+    #     inds.append(svm.indicator)
+
+    # plotPoints(inputs, targets)
+    # plotContours(inds, range(1,5))
+    # plt.title("Decision Boundary vs. Various Polynomial Degree")
+    # plt.savefig(f"pictures/poly.png", bbox_inches='tight')
+
+    # # RBF
+    inputs, targets = generateCircularData()
+    sigmas = [5,8,10,15]
+    plt.clf()
+    for i, sig in enumerate(sigmas):
+        try:
+            ax = plt.subplot(2, 2, i + 1)
+            plotPoints(inputs, targets)
+            svm = SVM(np.inf, get_kernel_rbf(sig))
+            svm.train(inputs, targets)
+            plotContour(svm.indicator)
+            ax.set_title(f"sigma={sig} accuracy={svm.getAccuracy()}")
+            plt.axis("off")
+            plt.tight_layout()
+        except AssertionError:
+            pass
+
+    plt.savefig(f"pictures/rbf_circle.png", bbox_inches='tight')
+    
+
+    stats = [(1, (1.5, 0.5), 0.2), (1, (-1.5, 0.5), 0.2), (-1, (0.0, -0.5), 0.2)]
+    inputs, targets = generateData(stats, 10)
+    sigmas = [0.2,0.4,0.6,0.8]
+    plt.clf()
+    for i, sig in enumerate(sigmas):
+        try:
+            ax = plt.subplot(2, 2, i + 1)
+            plotPoints(inputs, targets)
+            svm = SVM(np.inf, get_kernel_rbf(sig))
+            svm.train(inputs, targets)
+            plotContour(svm.indicator)
+            ax.set_title(f"sigma={sig} accuracy={svm.getAccuracy()}")
+            plt.axis("off")
+            plt.tight_layout()
+        except AssertionError:
+            pass
+
+    plt.savefig(f"pictures/rbf_original.png", bbox_inches='tight')
